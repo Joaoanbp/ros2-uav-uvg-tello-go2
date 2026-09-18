@@ -1,0 +1,4 @@
+# Local Compose configuration must not enter the image build context.
+.env
+.env.*
+!.env.example

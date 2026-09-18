@@ -1,0 +1,51 @@
+services:
+
+  robotics:
+
+    build:
+      context: .
+      dockerfile: Dockerfile
+
+      args:
+        USERNAME: ${USERNAME}
+        USER_UID: ${USER_UID}
+        USER_GID: ${USER_GID}
+
+    container_name: ros2-uav-ugv
+
+    network_mode: host
+    ipc: host
+
+    devices:
+      - /dev/dri:/dev/dri
+
+    group_add:
+      - "${VIDEO_GID}"
+      - "${RENDER_GID}"
+
+    environment:
+      DISPLAY: ${DISPLAY}
+      QT_QPA_PLATFORM: xcb
+
+      ROS_DOMAIN_ID: ${ROS_DOMAIN_ID:-0}
+
+      RMW_IMPLEMENTATION: rmw_cyclonedds_cpp
+
+      GZ_VERSION: harmonic
+
+      GZ_SIM_SYSTEM_PLUGIN_PATH: /workspace/code/ardupilot_gazebo/build
+
+      GZ_SIM_RESOURCE_PATH: /workspace/code/ardupilot_gazebo/models:/workspace/code/ardupilot_gazebo/worlds:/workspace/simulation/models:/workspace/simulation/worlds
+
+    volumes:
+      - ..:/workspace
+
+      - /tmp/.X11-unix:/tmp/.X11-unix:rw
+
+    working_dir: /workspace
+
+    stdin_open: true
+
+    tty: true
+
+    command: sleep infinity

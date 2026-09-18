@@ -1,0 +1,18 @@
+# Local configuration (keep the documented template).
+.env
+.env.*
+!.env.example
+
+# Third-party source trees restored from dependencies.repos.
+/code/
+
+# ROS 2 build artifacts.
+/ros2_ws/build/
+/ros2_ws/install/
+/ros2_ws/log/
+
+# Python and editor artifacts.
+__pycache__/
+*.py[cod]
+.vscode/
+.idea/

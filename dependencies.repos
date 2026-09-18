@@ -1,0 +1,13 @@
+repositories:
+  code/ardupilot:
+    type: git
+    url: https://github.com/ArduPilot/ardupilot.git
+    version: 14c871f2732ccc5f5f558d003eb46fb2fe29d832
+  code/ardupilot_gazebo:
+    type: git
+    url: https://github.com/ArduPilot/ardupilot_gazebo.git
+    version: 082a0fe231f6e63bc8d1598f1cba461d9e2ea7f5
+  code/unitree_sdk2_python:
+    type: git
+    url: https://github.com/unitreerobotics/unitree_sdk2_python.git
+    version: 65691c8a8bc53b98d3976dba4dbf9d5d20b2e7f5
