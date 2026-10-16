@@ -6,7 +6,7 @@ compose_file="${repo_dir}/docker/compose.yaml"
 
 if [[ ! -f /.dockerenv ]]; then
   exec docker compose -f "${compose_file}" exec -T robotics \
-    python3 /workspace/scripts/simple_mission.py
+    python3 /workspace/scripts/missao_de_teste.py
 fi
 
-exec python3 /workspace/scripts/simple_mission.py
+exec python3 /workspace/scripts/missao_de_teste.py

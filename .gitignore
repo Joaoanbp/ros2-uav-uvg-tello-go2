@@ -2,6 +2,7 @@
 .env
 .env.*
 !.env.example
+/docker/.xauth.*
 
 # Third-party source trees restored from dependencies.repos.
 /code/
@@ -10,6 +11,11 @@
 /ros2_ws/build/
 /ros2_ws/install/
 /ros2_ws/log/
+
+# Generated plots and other simulation outputs.
+/artifacts/
+/third_party/
+/models/
 
 # Python and editor artifacts.
 __pycache__/

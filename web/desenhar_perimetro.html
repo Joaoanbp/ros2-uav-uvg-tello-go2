@@ -1,0 +1,227 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Zigzag — desenhar perímetro</title>
+  <style>
+    :root { color-scheme: light; font-family: system-ui, -apple-system, sans-serif; background: #f4f6f1; color: #18322d; }
+    * { box-sizing: border-box; }
+    body { margin: 0; }
+    main { max-width: 1180px; padding: 24px; margin: auto; }
+    h1 { font-size: clamp(1.6rem, 4vw, 2.3rem); margin: 0 0 8px; }
+    p { line-height: 1.45; margin: 8px 0 16px; }
+    .layout { display: grid; grid-template-columns: minmax(0, 1.7fr) minmax(280px, .8fr); gap: 20px; align-items: start; }
+    .card { background: white; border: 1px solid #d8e2da; border-radius: 14px; padding: 16px; box-shadow: 0 5px 18px #1a3a3110; }
+    .toolbar, .actions { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 12px; }
+    button { border: 1px solid #bbcec4; border-radius: 9px; background: #f8fbf8; color: #163b2e; font: inherit; padding: 9px 12px; cursor: pointer; }
+    button:hover { background: #e7f4eb; }
+    button:disabled { opacity: .45; cursor: default; }
+    button.active, button.primary { background: #126546; color: white; border-color: #126546; }
+    button.primary:hover { background: #0d543a; }
+    .map-wrap { width: 100%; border: 1px solid #c9d8cf; border-radius: 10px; overflow: hidden; background: #f8fcf9; }
+    svg { display: block; width: 100%; aspect-ratio: 18 / 14; touch-action: none; cursor: crosshair; }
+    .hint { color: #567166; font-size: .92rem; }
+    .legend { display: flex; flex-wrap: wrap; gap: 12px; font-size: .85rem; margin-top: 12px; }
+    .legend span::before { content: ''; display: inline-block; width: 14px; height: 4px; vertical-align: middle; margin-right: 5px; background: var(--color); }
+    label { display: block; font-weight: 600; margin: 11px 0; }
+    input, select { font: inherit; display: block; width: 100%; padding: 9px; border: 1px solid #bdd1c5; border-radius: 8px; margin-top: 5px; background: white; }
+    .fields { display: grid; grid-template-columns: 1fr 1fr; gap: 0 12px; }
+    #status { min-height: 50px; padding: 11px; background: #edf7ef; border-radius: 8px; white-space: pre-wrap; }
+    #status.error { background: #fff0eb; color: #933b23; }
+    .small { font-size: .86rem; color: #567166; }
+    @media (max-width: 800px) { main { padding: 14px; } .layout { grid-template-columns: 1fr; } }
+  </style>
+</head>
+<body>
+<main>
+  <h1>Desenhe o perímetro do zigzag</h1>
+  <p>Marque os vértices na ordem desejada. Clique ou toque perto do primeiro ponto, ou use <strong>Fechar perímetro</strong>, para ligar o último ao primeiro. A grade está em metros.</p>
+  <div class="layout">
+    <section class="card" aria-label="Mapa para marcar o perímetro">
+      <div class="toolbar">
+        <button id="mode-polygon" class="active" type="button">Marcar vértices</button>
+        <button id="mode-home" type="button">Marcar decolagem</button>
+        <button id="close" type="button">Fechar perímetro</button>
+        <button id="undo" type="button">Desfazer ponto</button>
+        <button id="clear" type="button">Limpar</button>
+      </div>
+      <div class="map-wrap"><svg id="map" viewBox="-9 -7 18 14" role="img" aria-label="Grade em metros para desenhar o perímetro"></svg></div>
+      <div class="legend">
+        <span style="--color:#18885a">Perímetro</span><span style="--color:#286ed1">Zigzag</span>
+        <span style="--color:#d88b27">Conexão</span><span style="--color:#a93838">Decolagem</span>
+      </div>
+      <p class="hint">O início da missão é escolhido no ponto do perímetro mais próximo da decolagem. Um polígono que cruza a si mesmo será recusado.</p>
+    </section>
+    <section class="card" aria-label="Parâmetros da missão">
+      <label>Área visível na grade
+        <select id="span"><option value="12">12 × 9,3 m</option><option value="18" selected>18 × 14 m</option><option value="30">30 × 23,3 m</option></select>
+      </label>
+      <div class="fields">
+        <label>Altitude (m)<input id="altitude" type="number" min="0.4" max="20" step="0.1" value="1.6"></label>
+        <label>Faixa coberta (m)<input id="footprint" type="number" min="0.01" max="100" step="0.1" value="2"></label>
+        <label>Sobreposição lateral (%)<input id="overlap" type="number" min="0" max="99.9" step="1" value="80"></label>
+        <label>Vértices marcados<input id="count" type="text" value="0" readonly></label>
+      </div>
+      <p id="status" role="status">Marque pelo menos três pontos para definir a região.</p>
+      <div class="actions"><button id="start" class="primary" type="button" disabled>Iniciar no Gazebo</button></div>
+      <p class="small">Esta tela inicia somente a simulação. Para o Tello físico ainda são necessários localização e controle de voo reais.</p>
+    </section>
+  </div>
+</main>
+<script>
+(() => {
+  const svg = document.querySelector('#map');
+  const status = document.querySelector('#status');
+  const start = document.querySelector('#start');
+  const count = document.querySelector('#count');
+  const fields = ['altitude', 'footprint', 'overlap'];
+  const NS = 'http://www.w3.org/2000/svg';
+  let points = [];
+  let home = [-7, -5];
+  let closed = false;
+  let mode = 'polygon';
+  let preview = null;
+  let requestId = 0;
+  let busy = false;
+
+  function el(tag, attrs = {}) {
+    const node = document.createElementNS(NS, tag);
+    for (const [key, value] of Object.entries(attrs)) node.setAttribute(key, value);
+    svg.append(node);
+    return node;
+  }
+  function setStatus(message, error = false) {
+    status.textContent = message;
+    status.classList.toggle('error', error);
+  }
+  function view() {
+    const width = Number(document.querySelector('#span').value);
+    const height = width * 14 / 18;
+    svg.setAttribute('viewBox', `${-width/2} ${-height/2} ${width} ${height}`);
+    return [width, height];
+  }
+  function render() {
+    svg.replaceChildren();
+    const [width, height] = view();
+    const left = -width/2, top = -height/2;
+    for (let x = Math.ceil(left); x <= -left; x++) {
+      el('line', {x1:x, y1:top, x2:x, y2:-top, stroke:x===0?'#8fae9b':'#dce9df', 'stroke-width':x===0?0.025:0.012});
+    }
+    for (let y = Math.ceil(top); y <= -top; y++) {
+      el('line', {x1:left, y1:y, x2:-left, y2:y, stroke:y===0?'#8fae9b':'#dce9df', 'stroke-width':y===0?0.025:0.012});
+    }
+    if (preview) {
+      for (const leg of preview.legs) {
+        if (leg.kind === 'perimeter') continue;
+        el('line', {x1:leg.start[0], y1:-leg.start[1], x2:leg.end[0], y2:-leg.end[1],
+          stroke:leg.kind==='sweep'?'#286ed1':'#d88b27', 'stroke-width':.055,
+          'stroke-dasharray':leg.kind==='transit'?'.16 .12':'none'});
+      }
+    }
+    if (points.length) {
+      el(closed?'polygon':'polyline', {points:points.map(p=>`${p[0]},${-p[1]}`).join(' '),
+        fill:closed?'#27a56825':'none', stroke:'#18885a', 'stroke-width':.085, 'stroke-linejoin':'round'});
+      points.forEach((p, index) => {
+        el('circle', {cx:p[0], cy:-p[1], r:.11, fill:index===0?'#0b6f42':'#18885a', stroke:'white', 'stroke-width':.035});
+      });
+    }
+    if (preview) el('circle', {cx:preview.entry[0], cy:-preview.entry[1], r:.16, fill:'#f0b42c', stroke:'#17392b', 'stroke-width':.04});
+    el('circle', {cx:home[0], cy:-home[1], r:.17, fill:'#a93838', stroke:'white', 'stroke-width':.045});
+    count.value = String(points.length);
+  }
+  function payload() {
+    return {polygon:points, home,
+      altitude:Number(document.querySelector('#altitude').value),
+      footprint_width:Number(document.querySelector('#footprint').value),
+      side_overlap:Number(document.querySelector('#overlap').value)};
+  }
+  async function send(path) {
+    const response = await fetch(path, {method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify(payload())});
+    const data = await response.json();
+    if (!response.ok) throw Error(data.error || 'Falha ao validar a missão');
+    return data;
+  }
+  async function validate() {
+    const current = ++requestId;
+    preview = null;
+    start.disabled = true;
+    render();
+    if (!closed || points.length < 3) {
+      setStatus(points.length < 3 ? 'Marque pelo menos três pontos para definir a região.' : 'Feche o perímetro para calcular a rota.');
+      return;
+    }
+    setStatus('Calculando perímetro e zigzag…');
+    try {
+      const result = await send('/api/preview');
+      if (current !== requestId) return;
+      preview = result;
+      start.disabled = false;
+      setStatus(`${result.summary}\nEntrada: X ${result.entry[0].toFixed(2)} m, Y ${result.entry[1].toFixed(2)} m`);
+      render();
+    } catch (error) {
+      if (current === requestId) setStatus(error.message, true);
+    }
+  }
+  function setMode(next) {
+    mode = next;
+    document.querySelector('#mode-polygon').classList.toggle('active', mode==='polygon');
+    document.querySelector('#mode-home').classList.toggle('active', mode==='home');
+  }
+  svg.addEventListener('pointerdown', event => {
+    if (busy) return;
+    event.preventDefault();
+    const p = svg.createSVGPoint();
+    p.x = event.clientX; p.y = event.clientY;
+    const local = p.matrixTransform(svg.getScreenCTM().inverse());
+    const point = [Math.round(local.x*100)/100, Math.round(-local.y*100)/100];
+    if (mode === 'home') {
+      home = point;
+      render();
+      if (closed) validate();
+      return;
+    }
+    if (closed) { setStatus('Use Desfazer ponto ou Limpar para alterar o perímetro.'); return; }
+    if (points.length >= 3 && Math.hypot(point[0]-points[0][0], point[1]-points[0][1]) < .28) {
+      closed = true;
+      validate();
+      return;
+    }
+    if (points.length >= 128) { setStatus('O máximo é 128 vértices.', true); return; }
+    points.push(point);
+    render();
+    setStatus(`${points.length} vértices. Continue marcando ou feche o perímetro.`);
+  });
+  document.querySelector('#mode-polygon').onclick = () => setMode('polygon');
+  document.querySelector('#mode-home').onclick = () => setMode('home');
+  document.querySelector('#close').onclick = () => {
+    if (points.length < 3) { setStatus('Marque pelo menos três pontos.', true); return; }
+    closed = true;
+    validate();
+  };
+  document.querySelector('#undo').onclick = () => {
+    if (busy) return;
+    points.pop(); closed = false; preview = null; validate();
+  };
+  document.querySelector('#clear').onclick = () => {
+    if (busy) return;
+    points = []; closed = false; preview = null; validate();
+  };
+  document.querySelector('#span').onchange = render;
+  fields.forEach(id => document.querySelector(`#${id}`).addEventListener('input', () => { if (closed) validate(); }));
+  start.onclick = async () => {
+    if (!preview || busy) return;
+    busy = true; start.disabled = true;
+    setStatus('Salvando a missão e iniciando o Gazebo no terminal…');
+    try {
+      await send('/api/start');
+      setStatus('Missão salva. Acompanhe a inicialização do Gazebo no terminal.');
+    } catch (error) {
+      busy = false; start.disabled = false; setStatus(error.message, true);
+    }
+  };
+  render();
+})();
+</script>
+</body>
+</html>

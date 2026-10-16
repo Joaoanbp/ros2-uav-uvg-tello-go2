@@ -139,6 +139,8 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     rapidjson-dev \
     libopencv-dev \
     python3-opencv \
+    python3-matplotlib \
+    python3-pyqt5 \
     libgstreamer1.0-dev \
     libgstreamer-plugins-base1.0-dev \
     gstreamer1.0-plugins-bad \

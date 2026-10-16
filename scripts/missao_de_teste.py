@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Deterministic kinematic smoke test for the combined Gazebo world."""
+"""Missão de teste: sobe o drone e avança o Go2 no mundo uav_ugv."""
 
 import time
 
